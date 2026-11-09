@@ -1,0 +1,296 @@
+<title>Price History Tracker</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  /* Layout: app shell — header, add bar, product list on the left, detail pane on the right; stacks on phones. Same look as the real site. */
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --text: #16181d; --muted: #646b78; --line: #e3e6eb;
+    --accent: #2a62d8; --accent-ink: #ffffff; --good: #138a4b; --bad: #c63b3b; --warn: #a96a00;
+    --amazon: #b36b00; --flipkart: #2a62d8; --chip: #eef1f5; --demo-bg: #fff6e0; --demo-ink: #6b4a00;
+    --font: "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #111316; --panel: #1a1d22; --text: #e8eaee; --muted: #9aa1ad; --line: #2b3038;
+      --accent: #5b8cf0; --accent-ink: #0d1117; --good: #3fbf7a; --bad: #ef6b6b; --warn: #e2a33a;
+      --amazon: #f0a64a; --flipkart: #6f9cf5; --chip: #242830; --demo-bg: #2d2513; --demo-ink: #f0cf86;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #111316; --panel: #1a1d22; --text: #e8eaee; --muted: #9aa1ad; --line: #2b3038;
+    --accent: #5b8cf0; --accent-ink: #0d1117; --good: #3fbf7a; --bad: #ef6b6b; --warn: #e2a33a;
+    --amazon: #f0a64a; --flipkart: #6f9cf5; --chip: #242830; --demo-bg: #2d2513; --demo-ink: #f0cf86;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); font: 14px/1.45 var(--font); }
+  .gut { padding-left: max(24px, env(safe-area-inset-left, 0px)); padding-right: max(24px, env(safe-area-inset-right, 0px)); }
+  .demo-bar { background: var(--demo-bg); color: var(--demo-ink); font-size: 13px; padding-block: 8px; display: flex; gap: 8px 16px; flex-wrap: wrap; align-items: center; }
+  .demo-bar b { font-weight: 700; }
+  .demo-bar button { padding: 3px 10px; font-size: 12px; }
+  header { padding-block: 18px; border-bottom: 1px solid var(--line); background: var(--panel); display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  header h1 { font-size: 18px; margin: 0; font-weight: 650; letter-spacing: -0.01em; }
+  header .sub { color: var(--muted); font-size: 13px; }
+  header .spacer { flex: 1; }
+  form.add { display: flex; gap: 8px; flex-wrap: wrap; padding-block: 16px; border-bottom: 1px solid var(--line); background: var(--panel); }
+  input { font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px; min-width: 0; }
+  input:focus-visible, button:focus-visible, .item:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  #url { flex: 1 1 340px; }
+  #target { width: 160px; }
+  button { font: inherit; font-weight: 600; border: 1px solid var(--line); background: var(--panel); color: var(--text); border-radius: 8px; padding: 8px 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+  button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  button.danger { color: var(--bad); }
+  main { display: grid; grid-template-columns: minmax(280px, 360px) minmax(0, 1fr); }
+  #list { border-right: 1px solid var(--line); }
+  .item { display: flex; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--line); cursor: pointer; }
+  .item:hover { background: var(--chip); }
+  .item.sel { background: var(--chip); box-shadow: inset 3px 0 0 var(--accent); }
+  .thumb { width: 52px; height: 52px; flex: none; border-radius: 8px; background: var(--chip); border: 1px solid var(--line); display: grid; place-items: center; color: var(--muted); }
+  .thumb svg { width: 60%; height: 60%; }
+  .item .t { font-weight: 600; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .item .meta { display: flex; gap: 8px; align-items: baseline; margin-top: 4px; flex-wrap: wrap; }
+  .price { font-weight: 700; font-variant-numeric: tabular-nums; }
+  .chg { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .down { color: var(--good); } .up { color: var(--bad); }
+  .site { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
+  .site.amazon { color: var(--amazon); } .site.flipkart { color: var(--flipkart); }
+  .tag { font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 99px; background: var(--chip); color: var(--muted); }
+  .tag.good { color: var(--good); }
+  #detail { padding: 24px; min-width: 0; }
+  .dhead { display: flex; gap: 18px; align-items: flex-start; }
+  .dhead .thumb { width: 96px; height: 96px; }
+  .dhead h2 { margin: 2px 0 8px; font-size: 18px; line-height: 1.35; font-weight: 650; text-wrap: balance; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 22px 0 14px; }
+  .tile { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+  .tile .k { font-size: 12px; color: var(--muted); }
+  .tile .v { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; margin-top: 2px; }
+  .tile .s { font-size: 12px; color: var(--muted); }
+  .verdict { padding: 12px 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); margin-bottom: 14px; }
+  .verdict b.good { color: var(--good); } .verdict b.bad { color: var(--bad); } .verdict b.warn { color: var(--warn); }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin-bottom: 14px; }
+  .card h3 { margin: 0 0 10px; font-size: 14px; }
+  .chartbox { position: relative; height: 300px; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .hint { color: var(--muted); font-size: 12px; }
+  .tablewrap { overflow-x: auto; max-height: 320px; overflow-y: auto; }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; position: sticky; top: 0; background: var(--panel); }
+  td.r, th.r { text-align: right; }
+  .confirm { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--chip); }
+  footer { border-top: 1px solid var(--line); padding-block: 14px; color: var(--muted); font-size: 12px; background: var(--panel); }
+  #toast { position: fixed; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); left: 50%; transform: translateX(-50%); background: var(--text); color: var(--bg); padding: 10px 16px; border-radius: 8px; font-weight: 600; opacity: 0; transition: opacity .2s; pointer-events: none; max-width: calc(100vw - 32px); z-index: 10; }
+  #toast.show { opacity: 1; }
+  @media (prefers-reduced-motion: reduce) { #toast { transition: none; } }
+  @media (max-width: 800px) {
+    .gut { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+    main { grid-template-columns: minmax(0, 1fr); }
+    #list { border-right: 0; }
+    #detail { padding: 16px max(16px, env(safe-area-inset-right, 0px)) 16px max(16px, env(safe-area-inset-left, 0px)); border-top: 1px solid var(--line); }
+    .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    #target { flex: 1 1 130px; }
+    .dhead .thumb { width: 72px; height: 72px; }
+  }
+</style>
+
+<div class="demo-bar gut" role="note">
+  <span><b>Demo with sample data.</b> The products and prices here are made up to show how the site works. On the live site, pasting a link fetches the real price.</span>
+  <button type="button" id="resetDemo">Reset demo</button>
+</div>
+
+<header class="gut">
+  <div>
+    <h1>Price History Tracker</h1>
+    <div class="sub">Amazon &amp; Flipkart price history, checked automatically</div>
+  </div>
+  <div class="spacer"></div>
+  <button id="syncBtn" type="button">Sync devices</button>
+  <button id="csvBtn" type="button">Export CSV</button>
+</header>
+
+<form class="add gut" id="addForm">
+  <input id="url" type="text" inputmode="url" autocomplete="off" placeholder="Paste an Amazon or Flipkart product link…" required>
+  <input id="target" type="number" min="0" step="1" placeholder="Target &#8377; (optional)">
+  <button class="primary" id="addBtn" type="submit">+ Track product</button>
+</form>
+
+<main>
+  <div id="list"></div>
+  <div id="detail"></div>
+</main>
+
+<footer class="gut">
+  Prices are checked automatically every few hours and may be out of date. Always confirm on the store before buying.
+  Not affiliated with Amazon or Flipkart.
+</footer>
+<div id="toast" role="status"></div>
+
+<script>
+const RS = '₹';
+const ICONS = {
+  phone: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="6" y="2.5" width="12" height="19" rx="2.5"/><path d="M10.5 18.5h3"/></svg>',
+  headphones: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 15v-3a8 8 0 0 1 16 0v3"/><rect x="3" y="14" width="4" height="7" rx="1.5"/><rect x="17" y="14" width="4" height="7" rx="1.5"/></svg>',
+  tv: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2.5" y="4" width="19" height="13" rx="1.5"/><path d="M8 21h8M12 17v4"/></svg>',
+  shoe: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 16v-5l4-1 3 3 5 1 5 2v2H3z"/><path d="M3 18h18"/></svg>',
+  laptop: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="4.5" y="5" width="15" height="10" rx="1.2"/><path d="M2.5 19h19l-1.5-4h-16z"/></svg>',
+};
+
+// Deterministic sample histories: one price point whenever the price changed, over ~60 days.
+function rng(seed) { return () => (seed = (seed * 16807) % 2147483647) / 2147483647; }
+function makeHistory(seed, start, steps, endPrice) {
+  const r = rng(seed), now = Date.now(), h = [];
+  let t = now - 62 * 864e5, p = start;
+  for (const s of steps) { h.push({ t: new Date(t).toISOString(), p }); t += (3 + r() * 7) * 864e5; p = s; }
+  h.push({ t: new Date(Math.min(t, now - 2 * 864e5)).toISOString(), p: endPrice });
+  return h;
+}
+function seedProducts() {
+  return [
+    { id: 1, site: 'amazon', icon: 'headphones', title: 'Wireless Noise-Cancelling Over-Ear Headphones, 40 h battery (sample)', target: 19000,
+      history: makeHistory(11, 24990, [22990, 24990, 21490, 19990, 22490, 20990], 18990) },
+    { id: 2, site: 'flipkart', icon: 'phone', title: '5G Smartphone, 8 GB RAM, 256 GB storage, Midnight Black (sample)', target: null,
+      history: makeHistory(7, 32999, [31999, 29999, 31499, 30999, 32499], 31999) },
+    { id: 3, site: 'amazon', icon: 'tv', title: '55-inch 4K Ultra HD Smart LED TV (sample)', target: 38000,
+      history: makeHistory(23, 42990, [44990, 41990, 39990, 41490, 40990], 40490) },
+    { id: 4, site: 'flipkart', icon: 'shoe', title: "Men's Lightweight Running Shoes, Size 9 (sample)", target: null,
+      history: makeHistory(5, 3499, [2999, 3299, 2799, 3199], 3499) },
+    { id: 5, site: 'amazon', icon: 'laptop', title: '14-inch Thin and Light Laptop, 16 GB RAM, 512 GB SSD (sample)', target: null,
+      history: makeHistory(31, 58990, [], 58990) },
+  ].map(p => ({ ...p, lastChecked: new Date(Date.now() - 2.5 * 3600e3).toISOString(), added: p.history[0].t }));
+}
+
+let products = seedProducts(), selId = 1, chart = null, confirmDel = false;
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const money = n => n == null || isNaN(n) ? '—' : RS + Number(n).toLocaleString('en-IN', { maximumFractionDigits: 0 });
+const dt = s => s ? new Date(s).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
+const d = s => new Date(s).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+function toast(msg, ms = 3400) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), ms); }
+
+function stats(p) {
+  const h = p.history, ps = h.map(x => x.p), cur = ps[ps.length - 1];
+  const low = Math.min(...ps), high = Math.max(...ps), avg = ps.reduce((a, b) => a + b, 0) / ps.length;
+  let lastDiff = null; for (let i = ps.length - 2; i >= 0; i--) if (ps[i] !== cur) { lastDiff = ps[i]; break; }
+  return { h, ps, cur, low, high, avg, lowAt: h[ps.lastIndexOf(low)].t, highAt: h[ps.lastIndexOf(high)].t, lastDiff };
+}
+function changeHtml(cur, ref) {
+  if (ref == null || ref === cur) return '';
+  const diff = cur - ref, pct = diff / ref * 100;
+  return `<span class="chg ${diff < 0 ? 'down' : 'up'}">${diff < 0 ? '▼' : '▲'} ${money(Math.abs(diff))} (${Math.abs(pct).toFixed(1)}%)</span>`;
+}
+function verdict(p, s) {
+  if (p.target && s.cur <= p.target) return `<b class="good">Target reached.</b> ${money(s.cur)} is at or below your target of ${money(p.target)}.`;
+  if (s.high === s.low) return `<b class="warn">No price change yet.</b> It has stayed at ${money(s.cur)} since ${d(s.h[0].t)}.`;
+  if (s.cur <= s.low) return `<b class="good">Lowest price recorded.</b> This is the cheapest it has been since ${d(s.h[0].t)}.`;
+  if (s.cur <= s.avg * 0.98) return `<b class="good">Below average.</b> ${money(s.avg - s.cur)} under the average of ${money(s.avg)}; lowest seen was ${money(s.low)}.`;
+  if (s.cur >= s.avg * 1.02) return `<b class="bad">Above average.</b> ${money(s.cur - s.avg)} over the average; it was ${money(s.low)} on ${d(s.lowAt)}. Consider waiting.`;
+  return `<b class="warn">Around the usual price.</b> Average is ${money(s.avg)}, lowest was ${money(s.low)}.`;
+}
+
+function renderList() {
+  $('#list').innerHTML = products.map(p => {
+    const s = stats(p), atLow = s.high > s.low && s.cur <= s.low, hit = p.target && s.cur <= p.target;
+    return `<div class="item ${p.id === selId ? 'sel' : ''}" data-id="${p.id}" tabindex="0" role="button" aria-pressed="${p.id === selId}">
+      <div class="thumb">${ICONS[p.icon] || ICONS.phone}</div>
+      <div style="min-width:0">
+        <div class="t">${esc(p.title)}</div>
+        <div class="meta"><span class="site ${p.site}">${p.site}</span><span class="price">${money(s.cur)}</span>
+          ${changeHtml(s.cur, s.lastDiff)}
+          ${hit ? '<span class="tag good">Target hit</span>' : atLow ? '<span class="tag good">Lowest</span>' : ''}</div>
+      </div></div>`;
+  }).join('');
+  document.querySelectorAll('.item').forEach(n => {
+    const pick = () => { selId = +n.dataset.id; confirmDel = false; render(); if (innerWidth <= 800) $('#detail').scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }); };
+    n.onclick = pick; n.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(); } };
+  });
+}
+
+function renderDetail() {
+  if (chart) { chart.destroy(); chart = null; }
+  const p = products.find(x => x.id === selId);
+  if (!p) { $('#detail').innerHTML = `<p class="hint" style="padding:40px 0;text-align:center">No products left. Use “Reset demo” to bring the samples back.</p>`; return; }
+  const s = stats(p);
+  const rows = s.h.map((x, i) => ({ ...x, ch: i ? x.p - s.h[i - 1].p : null })).reverse();
+  $('#detail').innerHTML = `
+    <div class="dhead">
+      <div class="thumb">${ICONS[p.icon] || ICONS.phone}</div>
+      <div style="min-width:0">
+        <span class="site ${p.site}">${p.site}</span>
+        <h2>${esc(p.title)}</h2>
+        <div class="hint">History since ${dt(s.h[0].t)} · last checked ${dt(p.lastChecked)}</div>
+        <div class="actions">
+          <button id="chkOne" type="button">&#8635; Check now</button>
+          <button id="openOne" type="button">Open on ${p.site === 'amazon' ? 'Amazon' : 'Flipkart'} ↗</button>
+          <button id="delOne" class="danger" type="button">Remove</button>
+        </div>
+        ${confirmDel ? `<div class="confirm"><span>Remove this product from your list?</span><button id="delYes" class="danger" type="button">Remove</button><button id="delNo" type="button">Keep</button></div>` : ''}
+      </div>
+    </div>
+    <div class="tiles">
+      <div class="tile"><div class="k">Current</div><div class="v">${money(s.cur)}</div><div class="s">${changeHtml(s.cur, s.lastDiff) || 'no change'}</div></div>
+      <div class="tile"><div class="k">Lowest</div><div class="v down">${money(s.low)}</div><div class="s">${d(s.lowAt)}</div></div>
+      <div class="tile"><div class="k">Highest</div><div class="v up">${money(s.high)}</div><div class="s">${d(s.highAt)}</div></div>
+      <div class="tile"><div class="k">Average</div><div class="v">${money(s.avg)}</div><div class="s">${s.ps.length} price point${s.ps.length > 1 ? 's' : ''}</div></div>
+    </div>
+    <div class="verdict">${verdict(p, s)}</div>
+    <div class="card"><h3>Price history</h3><div class="chartbox"><canvas id="cv" aria-label="Price history chart"></canvas></div></div>
+    <div class="card">
+      <h3>Target price</h3>
+      <div class="row">
+        <input id="tgt" type="number" min="0" step="1" placeholder="Target price" value="${p.target ?? ''}" style="width:160px" aria-label="Target price">
+        <button id="saveTgt" type="button">Save target</button>
+        <span class="hint">The product is marked “Target hit” when its price drops to this.</span>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Price changes</h3>
+      <div class="tablewrap"><table><thead><tr><th>Recorded</th><th class="r">Price</th><th class="r">Change</th></tr></thead>
+      <tbody>${rows.map(r => `<tr><td>${dt(r.t)}</td><td class="r">${money(r.p)}</td><td class="r ${r.ch < 0 ? 'down' : r.ch > 0 ? 'up' : ''}">${r.ch ? (r.ch < 0 ? '−' : '+') + money(Math.abs(r.ch)) : '—'}</td></tr>`).join('')}</tbody></table></div>
+    </div>`;
+
+  $('#chkOne').onclick = () => { p.lastChecked = new Date().toISOString(); render(); toast('Demo: checked just now. The live site fetches the real price here.'); };
+  $('#openOne').onclick = () => toast('Demo: on the live site this opens the product page on the store.');
+  $('#delOne').onclick = () => { confirmDel = true; renderDetail(); };
+  if (confirmDel) {
+    $('#delNo').onclick = () => { confirmDel = false; renderDetail(); };
+    $('#delYes').onclick = () => { products = products.filter(x => x.id !== p.id); selId = products[0]?.id ?? null; confirmDel = false; render(); toast('Removed'); };
+  }
+  $('#saveTgt').onclick = () => { const v = parseFloat($('#tgt').value); p.target = isNaN(v) || v <= 0 ? null : v; render(); toast(p.target ? 'Target saved' : 'Target cleared'); };
+  if (window.Chart) drawChart(p, s);
+}
+
+function drawChart(p, s) {
+  const css = getComputedStyle(document.documentElement), c = k => css.getPropertyValue(k).trim();
+  const pts = s.h.map(x => ({ t: x.t, p: x.p }));
+  if (new Date(p.lastChecked) > new Date(pts[pts.length - 1].t)) pts.push({ t: p.lastChecked, p: s.cur });
+  const datasets = [{ label: 'Price', data: pts.map(x => x.p), stepped: 'before', borderColor: c('--accent'), backgroundColor: c('--accent') + '22',
+    fill: true, borderWidth: 2, pointRadius: 3, pointHoverRadius: 5 }];
+  if (p.target) datasets.push({ label: 'Target', data: pts.map(() => p.target), borderColor: c('--good'), borderDash: [6, 4], borderWidth: 1.5, pointRadius: 0, fill: false });
+  chart = new Chart($('#cv'), {
+    type: 'line', data: { labels: pts.map(x => d(x.t)), datasets },
+    options: { responsive: true, maintainAspectRatio: false, animation: matchMedia('(prefers-reduced-motion: reduce)').matches ? false : undefined,
+      interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { display: !!p.target, labels: { color: c('--muted'), boxWidth: 14 } },
+        tooltip: { callbacks: { title: it => dt(pts[it[0].dataIndex].t), label: i => `${i.dataset.label}: ${money(i.parsed.y)}` } } },
+      scales: { x: { ticks: { color: c('--muted'), maxTicksLimit: 7, maxRotation: 0 }, grid: { display: false } },
+        y: { ticks: { color: c('--muted'), callback: v => money(v) }, grid: { color: c('--line') }, grace: '8%' } } },
+  });
+}
+
+function render() { renderList(); renderDetail(); }
+
+$('#addForm').onsubmit = e => {
+  e.preventDefault();
+  const v = $('#url').value.trim();
+  const ok = /(^|\/\/|\.)(amazon\.[a-z.]+|amzn\.(in|to|eu)|flipkart\.com|fkrt\.(it|cc|co))(\/|$)/i.test(v);
+  toast(ok ? 'Demo: the live site would fetch this product\'s real price now.' : 'Only Amazon and Flipkart product links are supported.', 4200);
+};
+$('#syncBtn').onclick = () => toast('On the live site this shows a code to open your list on another device.', 4200);
+$('#csvBtn').onclick = () => toast('On the live site this downloads your price history as a CSV file.', 4200);
+$('#resetDemo').onclick = () => { products = seedProducts(); selId = 1; confirmDel = false; render(); toast('Demo reset'); };
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => renderDetail());
+new MutationObserver(() => renderDetail()).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+render();
+</script>

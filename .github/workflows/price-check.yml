@@ -1,0 +1,23 @@
+name: Scheduled price check
+
+# Calls the live site every 2 hours so it refreshes prices older than 6 hours.
+# Needs two repository secrets: APP_URL (e.g. https://price-history-tracker.onrender.com)
+# and CRON_SECRET (same value as the CRON_SECRET env var on Render).
+on:
+  schedule:
+    - cron: "17 */2 * * *"
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Trigger price check
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          # first request may take ~1 minute while the free Render service wakes up
+          curl -fsS --retry 4 --retry-delay 30 --retry-all-errors --max-time 240 \
+            -X POST -H "Authorization: Bearer $CRON_SECRET" "${APP_URL%/}/api/cron/check"

@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Price History Tracker</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --text: #16181d; --muted: #646b78; --line: #e3e6eb;
+    --accent: #2a62d8; --accent-ink: #ffffff; --good: #138a4b; --bad: #c63b3b; --warn: #a96a00;
+    --amazon: #b36b00; --flipkart: #2a62d8; --chip: #eef1f5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #111316; --panel: #1a1d22; --text: #e8eaee; --muted: #9aa1ad; --line: #2b3038;
+      --accent: #5b8cf0; --accent-ink: #0d1117; --good: #3fbf7a; --bad: #ef6b6b; --warn: #e2a33a;
+      --amazon: #f0a64a; --flipkart: #6f9cf5; --chip: #242830;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 "Segoe UI", system-ui, -apple-system, sans-serif; }
+  header { padding: 18px 24px; border-bottom: 1px solid var(--line); background: var(--panel); display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+  header h1 { font-size: 18px; margin: 0; font-weight: 650; letter-spacing: -0.01em; }
+  header .sub { color: var(--muted); font-size: 13px; }
+  header .spacer { flex: 1; }
+  form.add { display: flex; gap: 8px; flex-wrap: wrap; padding: 16px 24px; border-bottom: 1px solid var(--line); background: var(--panel); }
+  input { font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px; min-width: 0; }
+  input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  #url { flex: 1 1 380px; }
+  #target { width: 150px; }
+  button, .btn { font: inherit; font-weight: 600; border: 1px solid var(--line); background: var(--panel); color: var(--text); border-radius: 8px; padding: 8px 14px; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+  button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  button.danger { color: var(--bad); }
+  button:disabled { opacity: .55; cursor: progress; }
+  main { display: grid; grid-template-columns: minmax(280px, 380px) 1fr; min-height: calc(100vh - 140px); }
+  #list { border-right: 1px solid var(--line); overflow-y: auto; max-height: calc(100vh - 140px); }
+  .item { display: flex; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--line); cursor: pointer; }
+  .item:hover { background: var(--chip); }
+  .item.sel { background: var(--chip); box-shadow: inset 3px 0 0 var(--accent); }
+  .thumb { width: 52px; height: 52px; flex: none; border-radius: 8px; background: #fff center/contain no-repeat; border: 1px solid var(--line); }
+  .item .t { font-weight: 600; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .item .meta { display: flex; gap: 8px; align-items: baseline; margin-top: 4px; flex-wrap: wrap; }
+  .price { font-weight: 700; font-variant-numeric: tabular-nums; }
+  .chg { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .down { color: var(--good); } .up { color: var(--bad); }
+  .site { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+  .site.amazon { color: var(--amazon); } .site.flipkart { color: var(--flipkart); }
+  .tag { font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 99px; background: var(--chip); color: var(--muted); }
+  .tag.good { color: var(--good); } .tag.err { color: var(--bad); }
+  #detail { padding: 24px; overflow-y: auto; max-height: calc(100vh - 140px); }
+  .empty { color: var(--muted); padding: 48px 24px; text-align: center; }
+  .dhead { display: flex; gap: 18px; align-items: flex-start; }
+  .dhead .thumb { width: 96px; height: 96px; }
+  .dhead h2 { margin: 2px 0 8px; font-size: 18px; line-height: 1.35; font-weight: 650; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 22px 0 14px; }
+  .tile { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+  .tile .k { font-size: 12px; color: var(--muted); }
+  .tile .v { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; margin-top: 2px; }
+  .tile .s { font-size: 12px; color: var(--muted); }
+  .verdict { padding: 12px 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); margin-bottom: 14px; }
+  .verdict b.good { color: var(--good); } .verdict b.bad { color: var(--bad); } .verdict b.warn { color: var(--warn); }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin-bottom: 14px; }
+  .card h3 { margin: 0 0 10px; font-size: 14px; }
+  .chartbox { position: relative; height: 300px; }
+  .targetrow { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; }
+  td.r, th.r { text-align: right; }
+  .err { color: var(--bad); }
+  #toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: var(--text); color: var(--bg); padding: 10px 16px; border-radius: 8px; font-weight: 600; opacity: 0; transition: opacity .2s; pointer-events: none; max-width: calc(100vw - 32px); }
+  #toast.show { opacity: 1; }
+  @media (max-width: 800px) {
+    header, form.add { padding-left: 16px; padding-right: 16px; }
+    main { grid-template-columns: 1fr; }
+    #list, #detail { max-height: none; border-right: 0; }
+    #detail { padding: 16px; border-top: 1px solid var(--line); }
+    .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    #target { flex: 1 1 120px; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Price History Tracker</h1>
+    <div class="sub">Amazon &amp; Flipkart &middot; prices recorded every time you check</div>
+  </div>
+  <div class="spacer"></div>
+  <button id="checkAll" type="button">&#8635; Check all now</button>
+  <a class="btn" href="/api/export.csv">Export CSV</a>
+</header>
+
+<form class="add" id="addForm">
+  <input id="url" type="url" placeholder="Paste an Amazon or Flipkart product link…" required>
+  <input id="target" type="number" min="0" step="1" placeholder="Alert below &#8377; (optional)">
+  <button class="primary" id="addBtn" type="submit">+ Track product</button>
+</form>
+
+<main>
+  <div id="list"></div>
+  <div id="detail"></div>
+</main>
+<div id="toast"></div>
+
+<script>
+const RS = '₹';
+let products = [], selId = null, chart = null;
+
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const money = n => n == null || isNaN(n) ? '—' : RS + Number(n).toLocaleString('en-IN', { maximumFractionDigits: 0 });
+const dt = s => new Date(s).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+const d = s => new Date(s).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: '2-digit' });
+
+function toast(msg, ms = 3200) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), ms); }
+
+async function api(path, body) {
+  const r = await fetch(path, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {});
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || r.statusText);
+  return j;
+}
+
+function stats(p) {
+  const h = (p.history || []).filter(x => x && x.p != null);
+  if (!h.length) return null;
+  const ps = h.map(x => +x.p);
+  const cur = ps[ps.length - 1], prev = ps.length > 1 ? ps[ps.length - 2] : null;
+  const low = Math.min(...ps), high = Math.max(...ps), avg = ps.reduce((a, b) => a + b, 0) / ps.length;
+  const lowAt = h[ps.lastIndexOf(low)].t, highAt = h[ps.lastIndexOf(high)].t;
+  // change vs the last *different* price
+  let lastDiff = null; for (let i = ps.length - 2; i >= 0; i--) if (ps[i] !== cur) { lastDiff = ps[i]; break; }
+  return { h, ps, cur, prev, low, high, avg, lowAt, highAt, lastDiff };
+}
+
+function changeHtml(cur, ref) {
+  if (ref == null || ref === cur) return '';
+  const diff = cur - ref, pct = diff / ref * 100;
+  return `<span class="chg ${diff < 0 ? 'down' : 'up'}">${diff < 0 ? '▼' : '▲'} ${money(Math.abs(diff))} (${Math.abs(pct).toFixed(1)}%)</span>`;
+}
+
+function renderList() {
+  const el = $('#list');
+  if (!products.length) { el.innerHTML = `<div class="empty">No products yet.<br>Paste a product link above to start tracking.</div>`; return; }
+  el.innerHTML = products.map(p => {
+    const s = stats(p);
+    const atLow = s && s.high > s.low && s.cur <= s.low;
+    const hit = s && p.target && s.cur <= p.target;
+    return `<div class="item ${p.id === selId ? 'sel' : ''}" data-id="${p.id}">
+      <div class="thumb" style="background-image:url('${esc(p.image)}')"></div>
+      <div style="min-width:0">
+        <div class="t">${esc(p.title)}</div>
+        <div class="meta">
+          <span class="site ${p.site}">${p.site}</span>
+          <span class="price">${money(s?.cur)}</span>
+          ${s ? changeHtml(s.cur, s.lastDiff) : ''}
+          ${hit ? '<span class="tag good">Target hit</span>' : atLow ? '<span class="tag good">Lowest</span>' : ''}
+          ${p.lastError ? '<span class="tag err">Check failed</span>' : ''}
+        </div>
+      </div></div>`;
+  }).join('');
+  el.querySelectorAll('.item').forEach(n => n.onclick = () => { selId = n.dataset.id; render(); });
+}
+
+function verdict(p, s) {
+  if (s.ps.length < 2) return `<b class="warn">Just started tracking.</b> Check again over the coming days to build a history.`;
+  if (p.target && s.cur <= p.target) return `<b class="good">Target reached.</b> ${money(s.cur)} is at or below your target of ${money(p.target)}.`;
+  if (s.high === s.low) return `<b class="warn">No price change yet.</b> It has stayed at ${money(s.cur)} across ${s.ps.length} checks.`;
+  if (s.cur <= s.low) return `<b class="good">Lowest price recorded.</b> This is the cheapest it has been since you started tracking.`;
+  if (s.cur <= s.avg * 0.98) return `<b class="good">Below average.</b> ${money(s.avg - s.cur)} under the average of ${money(s.avg)}; lowest seen was ${money(s.low)}.`;
+  if (s.cur >= s.avg * 1.02) return `<b class="bad">Above average.</b> ${money(s.cur - s.avg)} over the average; it was ${money(s.low)} on ${d(s.lowAt)}. Consider waiting.`;
+  return `<b class="warn">Around the usual price.</b> Average is ${money(s.avg)}, lowest was ${money(s.low)}.`;
+}
+
+function renderDetail() {
+  const el = $('#detail');
+  const p = products.find(x => x.id === selId);
+  if (chart) { chart.destroy(); chart = null; }
+  if (!p) { el.innerHTML = products.length ? `<div class="empty">Select a product to see its price history.</div>` : ''; return; }
+  const s = stats(p);
+  const rows = s ? s.h.map((x, i) => ({ ...x, ch: i ? x.p - s.h[i - 1].p : null })).reverse() : [];
+  el.innerHTML = `
+    <div class="dhead">
+      <div class="thumb" style="background-image:url('${esc(p.image)}')"></div>
+      <div style="min-width:0">
+        <span class="site ${p.site}">${p.site}</span>
+        <h2>${esc(p.title)}</h2>
+        <div class="sub" style="color:var(--muted);font-size:12px">Tracking since ${dt(p.added)} · last checked ${dt(p.lastChecked)}</div>
+        ${p.lastError ? `<div class="err" style="margin-top:6px">Last check failed: ${esc(p.lastError)}</div>` : ''}
+        <div class="actions">
+          <button id="chkOne" type="button">&#8635; Check now</button>
+          <a class="btn" href="${esc(p.url)}" target="_blank" rel="noopener">Open on ${p.site === 'amazon' ? 'Amazon' : 'Flipkart'} ↗</a>
+          <button id="delOne" class="danger" type="button">Remove</button>
+        </div>
+      </div>
+    </div>
+    ${s ? `
+    <div class="tiles">
+      <div class="tile"><div class="k">Current</div><div class="v">${money(s.cur)}</div><div class="s">${changeHtml(s.cur, s.lastDiff) || 'no change'}</div></div>
+      <div class="tile"><div class="k">Lowest</div><div class="v down">${money(s.low)}</div><div class="s">${d(s.lowAt)}</div></div>
+      <div class="tile"><div class="k">Highest</div><div class="v up">${money(s.high)}</div><div class="s">${d(s.highAt)}</div></div>
+      <div class="tile"><div class="k">Average</div><div class="v">${money(s.avg)}</div><div class="s">${s.ps.length} check${s.ps.length > 1 ? 's' : ''}</div></div>
+    </div>
+    <div class="verdict">${verdict(p, s)}</div>
+    <div class="card"><h3>Price history</h3><div class="chartbox"><canvas id="cv"></canvas></div></div>` : ''}
+    <div class="card">
+      <h3>Price alert</h3>
+      <div class="targetrow">
+        <input id="tgt" type="number" min="0" step="1" placeholder="Target price" value="${p.target ?? ''}" style="width:160px">
+        <button id="saveTgt" type="button">Save target</button>
+        <span style="color:var(--muted);font-size:12px">The daily scheduled check shows a Windows notification when the price drops to this.</span>
+      </div>
+    </div>
+    <div class="card">
+      <h3>All recorded prices</h3>
+      <table><thead><tr><th>Checked</th><th class="r">Price</th><th class="r">Change</th></tr></thead>
+      <tbody>${rows.map(r => `<tr><td>${dt(r.t)}</td><td class="r">${money(r.p)}</td><td class="r ${r.ch < 0 ? 'down' : r.ch > 0 ? 'up' : ''}">${r.ch ? (r.ch < 0 ? '−' : '+') + money(Math.abs(r.ch)) : '—'}</td></tr>`).join('')}</tbody></table>
+    </div>`;
+
+  $('#chkOne').onclick = e => runCheck(p.id, e.currentTarget);
+  $('#delOne').onclick = async () => {
+    if (!confirm(`Stop tracking "${p.title}"? Its price history will be removed.`)) return;
+    await api('/api/delete', { id: p.id }); selId = null; await load(); toast('Removed');
+  };
+  $('#saveTgt').onclick = async () => {
+    const v = parseFloat($('#tgt').value);
+    await api('/api/target', { id: p.id, target: isNaN(v) ? null : v }); await load(); toast(isNaN(v) ? 'Target cleared' : 'Target saved');
+  };
+  if (s && window.Chart) drawChart(p, s);
+}
+
+function drawChart(p, s) {
+  const css = getComputedStyle(document.documentElement);
+  const c = k => css.getPropertyValue(k).trim();
+  const datasets = [{
+    label: 'Price', data: s.ps, stepped: 'before', borderColor: c('--accent'), backgroundColor: c('--accent') + '22',
+    fill: true, borderWidth: 2, pointRadius: s.ps.length > 40 ? 0 : 3, pointHoverRadius: 5,
+  }];
+  if (p.target) datasets.push({ label: 'Target', data: s.ps.map(() => p.target), borderColor: c('--good'), borderDash: [6, 4], borderWidth: 1.5, pointRadius: 0, fill: false });
+  chart = new Chart($('#cv'), {
+    type: 'line',
+    data: { labels: s.h.map(x => d(x.t)), datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { display: !!p.target, labels: { color: c('--muted'), boxWidth: 14 } },
+        tooltip: { callbacks: { title: items => dt(s.h[items[0].dataIndex].t), label: i => `${i.dataset.label}: ${money(i.parsed.y)}` } } },
+      scales: {
+        x: { ticks: { color: c('--muted'), maxTicksLimit: 8, maxRotation: 0 }, grid: { display: false } },
+        y: { ticks: { color: c('--muted'), callback: v => money(v) }, grid: { color: c('--line') }, grace: '8%' },
+      },
+    },
+  });
+}
+
+function render() { renderList(); renderDetail(); }
+
+async function load() {
+  try { products = await api('/api/products'); if (!Array.isArray(products)) products = [products]; }
+  catch (e) { toast('Could not load data: ' + e.message); products = []; }
+  if (!selId && products.length) selId = products[0].id;
+  render();
+}
+
+async function runCheck(id, btn) {
+  const label = btn.innerHTML; btn.disabled = true; btn.innerHTML = 'Checking…';
+  try {
+    const r = await api('/api/check', { id: id || '' });
+    await load();
+    toast(r.errors ? `Checked ${r.checked}, ${r.errors} failed` : `Checked ${r.checked} product${r.checked === 1 ? '' : 's'}`);
+  } catch (e) { toast('Check failed: ' + e.message); }
+  finally { btn.disabled = false; btn.innerHTML = label; }
+}
+
+$('#checkAll').onclick = e => runCheck('', e.currentTarget);
+$('#addForm').onsubmit = async e => {
+  e.preventDefault();
+  const btn = $('#addBtn'); btn.disabled = true; btn.textContent = 'Fetching…';
+  try {
+    const t = parseFloat($('#target').value);
+    const p = await api('/api/add', { url: $('#url').value, target: isNaN(t) ? null : t });
+    selId = p.id; $('#url').value = ''; $('#target').value = '';
+    await load(); toast('Now tracking: ' + p.title.slice(0, 60));
+  } catch (err) { toast(err.message, 5000); }
+  finally { btn.disabled = false; btn.textContent = '+ Track product'; }
+};
+load();
+</script>
+</body>
+</html>
